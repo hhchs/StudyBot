@@ -1,4 +1,4 @@
-# bot.py — /출석(실시간), 종료 요약, 프로필 썸네일, /일일정산, /주간정산
+# [test] bot.py — /출석(실시간), 종료 요약, 프로필 썸네일, /일일정산, /주간정산
 import os
 import discord
 from discord.ext import commands, tasks
