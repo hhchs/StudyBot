@@ -59,9 +59,9 @@ def make_embed(user_mention: str, start_utc: datetime, now_utc: datetime, runnin
         color=0x2ecc71 if running else 0x95a5a6,
     )
     emb.add_field(name="날짜", value=started_local.strftime("%Y-%m-%d"), inline=True)
-    emb.add_field(name="시간", value=f"{h:02d}:{m:02d}:{s:02d}", inline=True)
+    emb.add_field(name="시간", value=f"{h:02d}:{m:02d}", inline=True)
     emb.add_field(name="상태", value=state, inline=True)
-    emb.set_footer(text="⏱️ 10초 단위 자동 갱신")
+    emb.set_footer(text="⏱️ 1분 단위 자동 갱신")
     if avatar_url:
         emb.set_thumbnail(url=avatar_url)
     return emb
@@ -233,9 +233,9 @@ async def on_ready():
 
 
 
-@tasks.loop(seconds=30)
+@tasks.loop(seconds=60)
 async def update_timer_embeds():
-    """모든 진행중 타이머 임베드를 10초마다 갱신"""
+    """모든 진행중 타이머 임베드를 60초마다 갱신"""
     if not timers:
         return
     now = datetime.now(timezone.utc)
