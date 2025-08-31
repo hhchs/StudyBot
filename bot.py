@@ -265,8 +265,8 @@ async def slash_checkin(interaction: discord.Interaction):
     avatar = str(interaction.user.display_avatar.url)
 
     emb = make_embed(mention, start_at, start_at, running=True, avatar_url=avatar)
-    await interaction.response.send_message(embed=emb, view=view)
-    msg = await interaction.original_response()
+    await interaction.response.defer()
+    msg = await interaction.channel.send(embed=emb, view=view)
 
     timers[uid] = {"start": start_at, "message": msg, "view": view, "mention": mention, "avatar": avatar}
 
