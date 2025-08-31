@@ -233,7 +233,7 @@ async def on_ready():
 
 
 
-@tasks.loop(seconds=10)
+@tasks.loop(seconds=30)
 async def update_timer_embeds():
     """모든 진행중 타이머 임베드를 10초마다 갱신"""
     if not timers:
