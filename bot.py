@@ -59,7 +59,7 @@ def make_embed(user_mention: str, start_utc: datetime, now_utc: datetime, runnin
         color=0x2ecc71 if running else 0x95a5a6,
     )
     emb.add_field(name="날짜", value=started_local.strftime("%Y-%m-%d"), inline=True)
-    emb.add_field(name="시간", value=f"{h:02d}:{m:02d}", inline=True)
+    emb.add_field(name="시간", value=f"{h:02d}:{m:02d}:{s:02d}", inline=True)
     emb.add_field(name="상태", value=state, inline=True)
     emb.set_footer(text="⏱️ 1분 단위 자동 갱신")
     if avatar_url:
