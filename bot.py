@@ -186,7 +186,7 @@ def make_embed(user_mention: str, start_utc: datetime, now_utc: datetime, runnin
     emb.add_field(name="날짜", value=started_local.strftime("%Y-%m-%d"), inline=True)
     emb.add_field(name="시간", value=f"{h:02d}:{m:02d}:{s:02d}", inline=True)
     emb.add_field(name="상태", value=state, inline=True)
-    emb.set_footer(text="⏱️ 10초 단위 자동 갱신")
+    emb.set_footer(text="⏱️ 1분 단위 자동 갱신")
     if avatar_url:
         emb.set_thumbnail(url=avatar_url)
     return emb
@@ -270,6 +270,7 @@ async def end_tracking(member: discord.Member, reason: str = "자동 종료"):
         except Exception:
             pass
 
+<<<<<<< HEAD
     save_running()
 
 # =========================
@@ -277,6 +278,11 @@ async def end_tracking(member: discord.Member, reason: str = "자동 종료"):
 # =========================
 @tasks.loop(seconds=10)
 async def update_timer_embeds():
+=======
+@tasks.loop(seconds=60)
+async def update_timer_embeds():
+    """모든 진행중 타이머 임베드를 60초마다 갱신"""
+>>>>>>> 55c66bce4a2b8b9a9a5dc2b57c33e49a6b835efc
     if not timers:
         return
     now = datetime.now(timezone.utc)
@@ -309,6 +315,7 @@ async def auto_prune_every_tue_4am():
     if removed or trimmed:
         save_records()
 
+<<<<<<< HEAD
 def prune_old_records(cutoff_local: datetime) -> Tuple[int, int]:
     removed = 0
     trimmed = 0
@@ -328,6 +335,11 @@ def prune_old_records(cutoff_local: datetime) -> Tuple[int, int]:
                 new_list.append((s_utc, e_utc))
         records[uid] = new_list
     return removed, trimmed
+=======
+    emb = make_embed(mention, start_at, start_at, running=True, avatar_url=avatar)
+    await interaction.response.defer()
+    msg = await interaction.channel.send(embed=emb, view=view)
+>>>>>>> 55c66bce4a2b8b9a9a5dc2b57c33e49a6b835efc
 
 # =========================
 # 이벤트
