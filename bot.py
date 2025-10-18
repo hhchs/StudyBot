@@ -322,38 +322,44 @@ async def cmd_daily(i:discord.Interaction, 기준:Literal["오늘","어제"]):
     await i.response.send_message(embed=ebd, ephemeral=True)
 
 @bot.tree.command(name="주간정산", description="이번 주 또는 지난 주의 총 기록을 보여줍니다.")
-async def cmd_weekly(i:discord.Interaction, 기준:Literal["이번주","저번주"]):
-    # 🔧 추가: 3초 넘겨도 응답 가능하게 미리 defer
+async def cmd_weekly(i: discord.Interaction, 기준: Literal["이번주", "저번주"]):
+    # 3초 넘겨도 안전하게
     await i.response.defer(ephemeral=True)
 
-    uid=i.user.id
-    if 기준=="저번주": s,e=last_week_bounds_local_monday_to_sunday()
-    else: s,e=week_bounds_local_monday_to_sunday()
-    total=sum_seconds_in_range(uid,s,e)
-    label=f"{s.strftime('%Y-%m-%d')} ~ {(e - timedelta(days=1)).strftime('%Y-%m-%d')}"
-    ebd=discord.Embed(description=f"{i.user.mention} 주간 정산", color=0x0984E3)
-    ebd.add_field(name="기간", value=label, inline=False)
-    ebd.add_field(name="총 시간", value=fmt_hms(total), inline=True)
-    ebd.set_thumbnail(url=str(i.user.display_avatar.url))
+    uid = i.user.id
+    if 기준 == "저번주":
+        s, e = last_week_bounds_local_monday_to_sunday()
+    else:
+        s, e = week_bounds_local_monday_to_sunday()
 
-    # 🔧 변경: followup.send 사용
-    await i.followup.send(embed=ebd, ephemeral=True)
+    total = sum_seconds_in_range(uid, s, e)
+    label = f"{s.strftime('%Y-%m-%d')} ~ {(e - timedelta(days=1)).strftime('%Y-%m-%d')}"
+
+    emb = discord.Embed(description=f"{i.user.mention} 주간 정산", color=0x0984E3)
+    emb.add_field(name="기간", value=label, inline=False)
+    emb.add_field(name="총 시간", value=fmt_hms(total), inline=True)
+    emb.set_thumbnail(url=str(i.user.display_avatar.url))
+
+    await i.followup.send(embed=emb, ephemeral=True)
+
 
 
 @bot.tree.command(name="주간일람", description="스터디원 전원의 주간(월~일) 일별 시간 요약을 보여줍니다.")
 async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저번주"]):
     await i.response.defer(ephemeral=False)
 
-    # 🔧 추가: 먼저 빈 리스트 준비(try 블록 이전)
+    # 🔧 try 바깥에서 미리 만들어두기 (NameError 방지)
     per_user: List[Tuple[int, str, float, List[Tuple[datetime, float]]]] = []
 
     try:
+        # 주간 범위
         if 기준 == "저번주":
             week_start, week_end = last_week_bounds_local_monday_to_sunday()
         else:
             week_start, week_end = week_bounds_local_monday_to_sunday()
         days = [week_start + timedelta(days=k) for k in range(7)]
 
+        # 대상 uid 모으기 (기록 있거나 진행중)
         candidate_uids = set(records.keys())
         for uid, st in timers.items():
             if st["start"].astimezone() < week_end:
@@ -364,42 +370,46 @@ async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저�
             m = guild.get_member(uid) if guild else None
             return m.display_name if m else f"User {uid}"
 
-        # 🔧 per_user 채우기
+        # 집계
         for uid in candidate_uids:
             weekly_total = sum_seconds_in_range(uid, days[0], week_end)
             if weekly_total <= 0:
                 continue
-            day_rows = []
+            rows: List[Tuple[datetime, float]] = []
             for d in days:
-                secs = sum_seconds_in_single_day(uid, d)
-                day_rows.append((d, secs))
-            per_user.append((uid, name_for(uid), weekly_total, day_rows))
+                rows.append((d, sum_seconds_in_single_day(uid, d)))
+            per_user.append((uid, name_for(uid), weekly_total, rows))
 
+        # 정렬
         per_user.sort(key=lambda x: x[2], reverse=True)
 
         if not per_user:
             await i.followup.send("이번 주에는 기록이 없어요.")
             return
 
+        # 임베드 생성: 제목 대신 본문 첫 줄에 멘션
         embeds: List[discord.Embed] = []
-        for uid, uname, weekly_total, day_rows in per_user:
+        for uid, uname, weekly_total, rows in per_user:
             mention = f"<@{uid}>"
             emb = discord.Embed(description=f"{mention} 님의 주간 기록", color=0x6C5CE7)
-            member = guild.get_member(uid) if guild else None
-            if member:
-                emb.set_thumbnail(url=str(member.display_avatar.url))
-            for d, secs in day_rows:
+
+            m = guild.get_member(uid) if guild else None
+            if m:
+                emb.set_thumbnail(url=str(m.display_avatar.url))
+
+            for d, secs in rows:
                 emb.add_field(name=format_md_wd(d.astimezone()), value=fmt_hms(secs), inline=True)
+
             emb.add_field(name="주간 합계", value=fmt_hms(weekly_total), inline=False)
             embeds.append(emb)
 
+        # 10개씩 전송
         for k in range(0, len(embeds), 10):
             await i.followup.send(embeds=embeds[k:k+10])
 
     except Exception as e:
         print(f"❌ /주간일람 에러: {e}")
         await i.followup.send(f"❌ 주간일람 처리 중 에러가 났어요: {e}", ephemeral=True)
-
 
 
 @bot.tree.command(name="도움말", description="스터디봇 명령어 안내")
