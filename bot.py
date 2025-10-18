@@ -132,74 +132,108 @@ async def get_log_channel(guild:discord.Guild):
     return None
 
 # ---------------- 시작/종료 로직 ----------------
-async def start_tracking(member:discord.Member):
-    uid=member.id
-    if uid in timers: return
-    start=datetime.now(timezone.utc)
-    mention=member.mention
-    avatar=str(member.display_avatar.url)
-    timers[uid]={"start":start,"message":None,"mention":mention,"avatar":avatar}
+async def start_tracking(member: discord.Member):
+    uid = member.id
+    if uid in timers:
+        return
+
+    start = datetime.now(timezone.utc)
+    mention = member.mention
+    avatar = str(member.display_avatar.url)
+
+    timers[uid] = {
+        "start": start,
+        "message": None,
+        "message_id": None,
+        "channel_id": None,
+        "mention": mention,
+        "avatar": avatar,
+        "closing": False,
+    }
     save_running()
+
     ch = await get_log_channel(member.guild)
     if ch:
         try:
-            msg = await ch.send(embed=make_embed(mention,start,start,True,avatar))
-            timers[uid]["message"]=msg
-        except: pass
+            msg = await ch.send(embed=make_embed(mention, start, start, True, avatar))
+            timers[uid]["message"] = msg
+            timers[uid]["message_id"] = msg.id
+            timers[uid]["channel_id"] = msg.channel.id
+            print(f"▶️ Go Live 시작: uid={uid}, msg_id={msg.id}, ch_id={msg.channel.id}")
+        except Exception as e:
+            print(f"❌ 시작 메시지 전송 실패: {e}")
+
 
 async def end_tracking(member: discord.Member, reason="자동 종료"):
     uid = member.id
-
-    # 1) 현재 상태 확보 (달리던 루프가 이 메시지를 다시 건드리지 못하게 미리 'message=None' 처리)
     state = timers.get(uid)
-    msg: Optional[discord.Message] = None
-    if state:
-        msg = state.get("message")
-        # 루프가 list(timers.items()) 스냅샷으로 돌고 있어도 message=None이면 편집을 건너뜀
-        state["message"] = None
+    if not state:
+        return
 
-    # 2) 타이머 테이블에서 제거
-    timers.pop(uid, None)
+    # 루프가 건드리지 못하게 플래그/레퍼런스 차단
+    state["closing"] = True
+    msg: Optional[discord.Message] = state.get("message")
+    if msg:
+        state["message"] = None  # 루프 우회
 
-    # 3) 표시용 값들 준비
-    start = state["start"] if state else datetime.now(timezone.utc)
-    mention = (state.get("mention") if state else None) or member.mention
-    avatar = (state.get("avatar") if state else None) or str(member.display_avatar.url)
+    # 기본 정보
+    start = state["start"]
+    mention = state.get("mention") or member.mention
+    avatar = state.get("avatar") or str(member.display_avatar.url)
     now = datetime.now(timezone.utc)
 
-    # 4) 기록(1분 미만 제외)
+    # 기록(1분 미만 제외)
     dur = (now - start).total_seconds()
     qualify = dur >= 60
     if qualify:
         records.setdefault(uid, []).append((start, now))
         save_records()
 
-    # 5) 시작 때 올린 메시지를 '종료' 상태로 수정 (없으면 새로 1번만 보냄)
+    # 대상 메시지 확보(객체가 없으면 ID로 다시 가져옴)
     try:
-        emb = make_embed(mention, start, now, running=False, avatar_url=avatar)
+        if not msg and state.get("channel_id") and state.get("message_id"):
+            ch = member.guild.get_channel(state["channel_id"])
+            if ch:
+                msg = await ch.fetch_message(state["message_id"])
+    except Exception as e:
+        print(f"⚠️ 종료 시 메시지 재조회 실패: {e}")
+
+    # 종료 임베드로 편집(혹은 새로 전송)
+    try:
+        emb = make_embed(mention, start, now, running=False, avatar=avatar)
         if msg:
             await msg.edit(embed=emb)
+            print(f"⏹️ 종료 편집 완료: uid={uid}, msg_id={msg.id}")
         else:
             ch = await get_log_channel(member.guild)
             if ch:
                 await ch.send(embed=emb)
-    except Exception:
-        pass
+                print(f"⏹️ 종료 새 메시지 전송: uid={uid}, ch_id={ch.id}")
+    except Exception as e:
+        print(f"❌ 종료 편집 실패: {e}")
 
-    # 6) 실행중 정보 저장(복구 파일)
+    # 테이블에서 제거 + 러닝 저장
+    timers.pop(uid, None)
     save_running()
+
 
 
 # ---------------- 주기 갱신/정리 ----------------
 @tasks.loop(seconds=60)
 async def update_timer_embeds():
-    if not timers: return
-    now=datetime.now(timezone.utc)
-    for uid,st in list(timers.items()):
-        msg=st.get("message")
+    if not timers:
+        return
+    now = datetime.now(timezone.utc)
+    for uid, st in list(timers.items()):
+        if st.get("closing"):
+            continue  # 종료 처리 중이면 건너뜀
+        msg = st.get("message")
         if msg:
-            try: await msg.edit(embed=make_embed(st["mention"], st["start"], now, True, st["avatar"]))
-            except: pass
+            try:
+                await msg.edit(embed=make_embed(st["mention"], st["start"], now, True, st["avatar"]))
+            except Exception as e:
+                print(f"⚠️ 진행중 갱신 실패 uid={uid}: {e}")
+
 
 _last_prune_marker: Optional[str] = None
 @tasks.loop(minutes=1)
