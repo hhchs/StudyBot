@@ -213,19 +213,41 @@ async def auto_prune_every_tue_4am():
 @bot.event
 async def on_ready():
     print(f"✅ 로그인: {bot.user}")
+
+    # 기록/진행중 복구
     load_records()
     load_running_partial()
-    if not update_timer_embeds.is_running(): update_timer_embeds.start()
-    if not auto_prune_every_tue_4am.is_running(): auto_prune_every_tue_4am.start()
 
-    # 🔹 여기서 '길드별 슬래시 명령' 강제 등록 (중요!)
-    for gid in GUILD_IDS:
+    # 타이머 갱신/프루닝 루프 시작
+    if not update_timer_embeds.is_running():
+        update_timer_embeds.start()
+    if not auto_prune_every_tue_4am.is_running():
+        auto_prune_every_tue_4am.start()
+
+    # 내가 실제로 들어가 있는 길드(서버) 목록을 로그로 보여주기
+    print("🛰️ Joined guilds:")
+    for g in bot.guilds:
+        print(f" - {g.id} | {g.name}")
+
+    # ⚡ GUILD_IDS 무시하고 '현재 들어가 있는 모든 길드'에 슬래시 명령 강제 싱크
+    #    (환경변수가 틀려도 작동하게)
+    synced_total = 0
+    for g in bot.guilds:
         try:
-            guild_obj = discord.Object(id=int(gid))
-            synced = await bot.tree.sync(guild=guild_obj)
-            print(f"✅ Synced {len(synced)} commands to guild {gid}")
+            synced = await bot.tree.sync(guild=discord.Object(id=g.id))
+            print(f"✅ Synced {len(synced)} commands to guild {g.id} ({g.name})")
+            synced_total += len(synced)
         except Exception as e:
-            print(f"❌ Sync failed for {gid}: {e}")
+            print(f"❌ Sync failed for {g.id} ({g.name}): {e}")
+
+    # 그래도 하나도 안 잡히면 글로벌 싱크(느릴 수 있지만 마지막 안전망)
+    if synced_total == 0:
+        try:
+            gs = await bot.tree.sync()
+            print(f"🪄 Global sync pushed: {len(gs)} commands")
+        except Exception as e:
+            print(f"❌ Global sync failed: {e}")
+
 
 @bot.event
 async def on_voice_state_update(member:discord.Member, before:discord.VoiceState, after:discord.VoiceState):
