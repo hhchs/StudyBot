@@ -147,35 +147,48 @@ async def start_tracking(member:discord.Member):
             timers[uid]["message"]=msg
         except: pass
 
-async def end_tracking(member:discord.Member, reason="자동 종료"):
-    uid=member.id
-    st=timers.pop(uid,None)
-    if not st: return
-    start=st["start"]; msg=st.get("message")
-    mention=st.get("mention") or member.mention
-    avatar=st.get("avatar") or str(member.display_avatar.url)
-    now=datetime.now(timezone.utc)
-    dur=(now-start).total_seconds()
-    qualify = dur>=60
-    if qualify:
-        records.setdefault(uid,[]).append((start,now))
-        save_records()
-    if msg:
-        try:
-            # 종료 상태로 기존 메시지 업데이트
-            await msg.edit(embed=make_embed(mention, start_at, now, running=False, avatar_url=avatar))
-        except Exception:
-            pass
-    else:
-        # 혹시 msg가 None일 때만 새로 보냄 (예외처리)
-        ch = await get_log_channel(member.guild)
-        if ch:
-            try:
-                await ch.send(embed=make_embed(mention, start_at, now, running=False, avatar_url=avatar))
-            except Exception:
-                pass
+async def end_tracking(member: discord.Member, reason="자동 종료"):
+    uid = member.id
 
+    # 1) 현재 상태 확보 (달리던 루프가 이 메시지를 다시 건드리지 못하게 미리 'message=None' 처리)
+    state = timers.get(uid)
+    msg: Optional[discord.Message] = None
+    if state:
+        msg = state.get("message")
+        # 루프가 list(timers.items()) 스냅샷으로 돌고 있어도 message=None이면 편집을 건너뜀
+        state["message"] = None
+
+    # 2) 타이머 테이블에서 제거
+    timers.pop(uid, None)
+
+    # 3) 표시용 값들 준비
+    start = state["start"] if state else datetime.now(timezone.utc)
+    mention = (state.get("mention") if state else None) or member.mention
+    avatar = (state.get("avatar") if state else None) or str(member.display_avatar.url)
+    now = datetime.now(timezone.utc)
+
+    # 4) 기록(1분 미만 제외)
+    dur = (now - start).total_seconds()
+    qualify = dur >= 60
+    if qualify:
+        records.setdefault(uid, []).append((start, now))
+        save_records()
+
+    # 5) 시작 때 올린 메시지를 '종료' 상태로 수정 (없으면 새로 1번만 보냄)
+    try:
+        emb = make_embed(mention, start, now, running=False, avatar_url=avatar)
+        if msg:
+            await msg.edit(embed=emb)
+        else:
+            ch = await get_log_channel(member.guild)
+            if ch:
+                await ch.send(embed=emb)
+    except Exception:
+        pass
+
+    # 6) 실행중 정보 저장(복구 파일)
     save_running()
+
 
 # ---------------- 주기 갱신/정리 ----------------
 @tasks.loop(seconds=60)
@@ -318,13 +331,22 @@ async def cmd_roster(i:discord.Interaction, 기준:Literal["이번주","저번�
         await i.followup.send("이번 주에는 기록이 없어요.")
         return
 
-    embeds=[]
-    for uid,uname,weekly,rows in per:
-        e=discord.Embed(title=uname, color=0x6C5CE7)
-        e.set_footer(text=f"주간 합계: {fmt_hms(weekly)}")
-        for d,secs in rows:
-            e.add_field(name=format_md_wd(d.astimezone()), value=fmt_hms(secs), inline=True)
-        embeds.append(e)
+    # 임베드 생성(한 사람당 1개)
+    embeds: List[discord.Embed] = []
+    for uid, uname, weekly_total, day_rows in per_user:
+        mention = f"<@{uid}>"
+        emb = discord.Embed(
+            description=f"{mention} 님의 주간 기록",
+            color=0x6C5CE7
+        )
+        emb.set_thumbnail(url=str(interaction.guild.get_member(uid).display_avatar.url)
+                          if interaction.guild.get_member(uid) else None)
+        for d, secs in day_rows:
+            label = format_md_wd(d.astimezone())
+            emb.add_field(name=label, value=fmt_hms(secs), inline=True)
+        emb.add_field(name="주간 합계", value=fmt_hms(weekly_total), inline=False)
+        embeds.append(emb)
+
 
     # 10개씩 잘라 보내기
     for k in range(0,len(embeds),10):
