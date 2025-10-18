@@ -282,7 +282,6 @@ async def on_voice_state_update(member, before, after):
             await end_tracking(member, "자동 종료(스트림 종료/퇴장)")
 
 # =========================
-# 슬래시 명령
 # =========================
 @bot.tree.command(name="도움말")
 async def help_cmd(i: discord.Interaction):
