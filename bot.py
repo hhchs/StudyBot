@@ -161,18 +161,20 @@ async def end_tracking(member:discord.Member, reason="자동 종료"):
         records.setdefault(uid,[]).append((start,now))
         save_records()
     if msg:
-        try: await msg.edit(embed=make_embed(mention,start,now,False,avatar))
-        except: pass
-    ch = await get_log_channel(member.guild)
-    if ch:
-        color=0x5865F2 if qualify else 0x747F8D
-        e=discord.Embed(description=f"{mention} 세션 종료 요약 • {reason}", color=color)
-        e.add_field(name="기간", value=start.astimezone().strftime("%Y-%m-%d %H:%M:%S")+" ~ "+now.astimezone().strftime("%H:%M:%S"))
-        e.add_field(name="측정", value=fmt_hms(dur))
-        e.add_field(name="기록 반영", value=("✅ 포함" if qualify else "❌ 1분 미만(제외)"))
-        e.set_thumbnail(url=avatar)
-        try: await ch.send(embed=e)
-        except: pass
+        try:
+            # 종료 상태로 기존 메시지 업데이트
+            await msg.edit(embed=make_embed(mention, start_at, now, running=False, avatar_url=avatar))
+        except Exception:
+            pass
+    else:
+        # 혹시 msg가 None일 때만 새로 보냄 (예외처리)
+        ch = await get_log_channel(member.guild)
+        if ch:
+            try:
+                await ch.send(embed=make_embed(mention, start_at, now, running=False, avatar_url=avatar))
+            except Exception:
+                pass
+
     save_running()
 
 # ---------------- 주기 갱신/정리 ----------------
