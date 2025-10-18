@@ -323,6 +323,9 @@ async def cmd_daily(i:discord.Interaction, 기준:Literal["오늘","어제"]):
 
 @bot.tree.command(name="주간정산", description="이번 주 또는 지난 주의 총 기록을 보여줍니다.")
 async def cmd_weekly(i:discord.Interaction, 기준:Literal["이번주","저번주"]):
+    # 🔧 추가: 3초 넘겨도 응답 가능하게 미리 defer
+    await i.response.defer(ephemeral=True)
+
     uid=i.user.id
     if 기준=="저번주": s,e=last_week_bounds_local_monday_to_sunday()
     else: s,e=week_bounds_local_monday_to_sunday()
@@ -332,34 +335,36 @@ async def cmd_weekly(i:discord.Interaction, 기준:Literal["이번주","저번�
     ebd.add_field(name="기간", value=label, inline=False)
     ebd.add_field(name="총 시간", value=fmt_hms(total), inline=True)
     ebd.set_thumbnail(url=str(i.user.display_avatar.url))
-    await i.response.send_message(embed=ebd, ephemeral=True)
+
+    # 🔧 변경: followup.send 사용
+    await i.followup.send(embed=ebd, ephemeral=True)
+
 
 @bot.tree.command(name="주간일람", description="스터디원 전원의 주간(월~일) 일별 시간 요약을 보여줍니다.")
 async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저번주"]):
-    # 디스코드에 "생각중…" 표시 먼저 띄우기 (타임아웃 방지)
     await i.response.defer(ephemeral=False)
 
+    # 🔧 추가: 먼저 빈 리스트 준비(try 블록 이전)
+    per_user: List[Tuple[int, str, float, List[Tuple[datetime, float]]]] = []
+
     try:
-        # 주간 범위 계산
         if 기준 == "저번주":
             week_start, week_end = last_week_bounds_local_monday_to_sunday()
         else:
             week_start, week_end = week_bounds_local_monday_to_sunday()
         days = [week_start + timedelta(days=k) for k in range(7)]
 
-        # 후보 사용자 모으기 (기록 있거나 진행중)
         candidate_uids = set(records.keys())
         for uid, st in timers.items():
             if st["start"].astimezone() < week_end:
                 candidate_uids.add(uid)
 
         guild = i.guild
-
         def name_for(uid: int) -> str:
             m = guild.get_member(uid) if guild else None
             return m.display_name if m else f"User {uid}"
 
-        per_user = []
+        # 🔧 per_user 채우기
         for uid in candidate_uids:
             weekly_total = sum_seconds_in_range(uid, days[0], week_end)
             if weekly_total <= 0:
@@ -370,41 +375,31 @@ async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저�
                 day_rows.append((d, secs))
             per_user.append((uid, name_for(uid), weekly_total, day_rows))
 
-        # 주간 합계 내림차순
         per_user.sort(key=lambda x: x[2], reverse=True)
 
         if not per_user:
             await i.followup.send("이번 주에는 기록이 없어요.")
             return
 
-        # 임베드 생성: 제목 대신 본문 첫줄에 @멘션 + 썸네일(멤버 있을 때만)
         embeds: List[discord.Embed] = []
         for uid, uname, weekly_total, day_rows in per_user:
             mention = f"<@{uid}>"
-            emb = discord.Embed(
-                description=f"{mention} 님의 주간 기록",
-                color=0x6C5CE7
-            )
-
+            emb = discord.Embed(description=f"{mention} 님의 주간 기록", color=0x6C5CE7)
             member = guild.get_member(uid) if guild else None
             if member:
                 emb.set_thumbnail(url=str(member.display_avatar.url))
-
             for d, secs in day_rows:
-                label = format_md_wd(d.astimezone())
-                emb.add_field(name=label, value=fmt_hms(secs), inline=True)
-
+                emb.add_field(name=format_md_wd(d.astimezone()), value=fmt_hms(secs), inline=True)
             emb.add_field(name="주간 합계", value=fmt_hms(weekly_total), inline=False)
             embeds.append(emb)
 
-        # 10개씩 나눠 전송
         for k in range(0, len(embeds), 10):
             await i.followup.send(embeds=embeds[k:k+10])
 
     except Exception as e:
-        # 문제 생기면 이유를 바로 보여주기
         print(f"❌ /주간일람 에러: {e}")
         await i.followup.send(f"❌ 주간일람 처리 중 에러가 났어요: {e}", ephemeral=True)
+
 
 
 @bot.tree.command(name="도움말", description="스터디봇 명령어 안내")
