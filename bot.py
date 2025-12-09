@@ -322,6 +322,16 @@ async def on_ready():
 
     # (참고) 전역(Global) 명령은 여기서 만지지 않음
 
+    # 🔧 필요할 때만 1회 전역 비우기 (CLEAR_GLOBAL=1일 때만 작동)
+    if os.getenv("CLEAR_GLOBAL") == "1":
+        try:
+            bot.tree.clear_commands()   # 로컬 전역 트리 비움
+            cleared = await bot.tree.sync()  # 빈 전역 트리를 서버에 반영 → 전역 명령 삭제
+            print(f"🧹 Cleared GLOBAL commands ({len(cleared)} now)")
+        except Exception as e:
+            print(f"❌ Global clear failed: {e}")
+
+
 
 @bot.event
 async def on_voice_state_update(member:discord.Member, before:discord.VoiceState, after:discord.VoiceState):
