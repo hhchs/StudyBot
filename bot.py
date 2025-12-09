@@ -301,37 +301,26 @@ async def on_ready():
     load_running_partial()
     load_autotrack()
 
-    # 타이머 갱신/프루닝 루프 시작
+    # 주기 작업 시작
     if not update_timer_embeds.is_running():
         update_timer_embeds.start()
     if not auto_prune_every_tue_4am.is_running():
         auto_prune_every_tue_4am.start()
 
-    # 내가 실제로 들어가 있는 길드(서버) 목록을 로그로 보여주기
+    # 내가 실제로 들어가 있는 길드 목록 찍기
     print("🛰️ Joined guilds:")
     for g in bot.guilds:
         print(f" - {g.id} | {g.name}")
 
-    # ⚡ 모든 길드에 '기존 등록 지우기 → 글로벌 정의 복사 → 동기화' 순서로 강제 리프레시
-    synced_total = 0
-        # ⚡ 1) 길드에만 등록 (지우고→복사→동기화)
+    # ✅ 깔끔: 각 길드에만 슬래시 명령 동기화 (전역 등록은 건드리지 않음)
     for g in bot.guilds:
         try:
-            guild_obj = discord.Object(id=g.id)
-            bot.tree.clear_commands(guild=guild_obj)          # 길드 캐시 비우기
-            bot.tree.copy_global_to(guild=guild_obj)          # 전역 정의를 길드로 복사
-            synced = await bot.tree.sync(guild=guild_obj)     # 길드 동기화
+            synced = await bot.tree.sync(guild=discord.Object(id=g.id))
             print(f"✅ Guild sync: {g.id} ({g.name}) → {len(synced)} cmds")
         except Exception as e:
             print(f"❌ Guild sync failed for {g.id} ({g.name}): {e}")
 
-    # ⚠️ 2) 글로벌 등록을 비워서 '중복' 원인 제거
-    try:
-        bot.tree.clear_commands()      # 로컬 전역 트리 비움
-        gs = await bot.tree.sync()     # 빈 전역 트리를 서버에 반영 → 글로벌 명령 삭제
-        print(f"🧹 Cleared GLOBAL commands ({len(gs)} now)")
-    except Exception as e:
-        print(f"❌ Global clear failed: {e}")
+    # (참고) 전역(Global) 명령은 여기서 만지지 않음
 
 
 @bot.event
