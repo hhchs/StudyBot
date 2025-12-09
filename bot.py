@@ -16,6 +16,31 @@ RECORDS_JSON = os.path.join(DATA_DIR,"records.json")
 RUNNING_JSON = os.path.join(DATA_DIR,"running.json")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# --- 계정별 자동기록 스위치 저장 경로 ---
+AUTOTRACK_JSON = os.path.join(DATA_DIR, "autotrack.json")
+
+# --- 메모리 테이블: { user_id: bool }  (기본 True)
+autotrack: Dict[int, bool] = {}
+
+def save_autotrack():
+    try:
+        with open(AUTOTRACK_JSON, "w", encoding="utf-8") as f:
+            json.dump({str(k): v for k, v in autotrack.items()}, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+def load_autotrack():
+    try:
+        with open(AUTOTRACK_JSON, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        autotrack.clear()
+        for k, v in raw.items():
+            autotrack[int(k)] = bool(v)
+    except FileNotFoundError:
+        pass
+    except:
+        pass
+
 # ---------------- 시간 유틸 ----------------
 KOR_WD = ["월","화","수","목","금","토","일"]
 
@@ -133,6 +158,14 @@ async def get_log_channel(guild:discord.Guild):
 
 # ---------------- 시작/종료 로직 ----------------
 async def start_tracking(member: discord.Member):
+
+    # 계정 단위 자동기록 스위치 확인 (기본 True)
+    enabled = autotrack.get(member.id, True)
+    if not enabled:
+        # 끈 상태면 시작하지 않음
+        print(f"⏸️ 자동기록 OFF: uid={member.id} | {member.display_name}")
+        return
+
     uid = member.id
     if uid in timers:
         return
@@ -266,6 +299,7 @@ async def on_ready():
     # 기록/진행중 복구
     load_records()
     load_running_partial()
+    load_autotrack()
 
     # 타이머 갱신/프루닝 루프 시작
     if not update_timer_embeds.is_running():
@@ -342,8 +376,6 @@ async def cmd_weekly(i: discord.Interaction, 기준: Literal["이번주", "저�
 
     await i.followup.send(embed=emb, ephemeral=True)
 
-
-
 @bot.tree.command(name="주간일람", description="스터디원 전원의 주간(월~일) 일별 시간 요약을 보여줍니다.")
 async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저번주"]):
     await i.response.defer(ephemeral=False)
@@ -409,17 +441,40 @@ async def cmd_roster(i: discord.Interaction, 기준: Literal["이번주", "저�
 
     except Exception as e:
         print(f"❌ /주간일람 에러: {e}")
-        await i.followup.send(f"❌ 주간일람 처리 중 에러가 났어요: {e}", ephemeral=True)
+        await i.followup.send(f"❌ 주간일람 처리 중 에러가 생겼습니다.: {e}", ephemeral=True)
 
 
 @bot.tree.command(name="도움말", description="스터디봇 명령어 안내")
 async def cmd_help(i:discord.Interaction):
     e=discord.Embed(title="📖 도움말", color=0xFFD166)
-    e.add_field(name="자동 측정", value="화면공유(Go Live) 시작→자동 기록, 종료→자동 저장. 1분 미만 제외.", inline=False)
+    e.add_field(name="측정 방법", value="스터디방에서 화면공유 시작 시, 자동으로 기록이 시작됩니다. 자동 기록 설정은 /자동기록 명령어로 변경할 수 있습니다. 화면공유가 종료되면 측정을 종료합니다. 1분 미만의 기록은 반영되지 않습니다.", inline=False)
     e.add_field(name="/일일정산", value="오늘/어제 개인 총시간", inline=False)
     e.add_field(name="/주간정산", value="이번주/저번주 개인 총시간", inline=False)
-    e.add_field(name="/주간일람", value="전체 멤버 월~일 일별 시간표", inline=False)
+    e.add_field(name="/주간일람", value="전체 멤버의 이번주/저번주 일별 기록", inline=False)
+    e.add_field(name="/자동기록", value="내 계정의 자동 기록 On/Off를 설정할 수 있습니다.", inline=False)
+    e.add_field(name="/자동기록상태", value="내 계정의 자동 기록 상태를 확인할 수 있습니다.", inline=False)
     await i.response.send_message(embed=e, ephemeral=True)
+
+@bot.tree.command(name="자동기록", description="내 계정의 자동 기록 On/Off를 설정합니다.")
+async def cmd_autotrack(i: discord.Interaction, 상태: Literal["On", "Off"]):
+    uid = i.user.id
+    val = (상태 == "On")
+    autotrack[uid] = val
+    save_autotrack()
+    text = "✅ 자동으로 기록을 시작합니다." if val else "⛔ 자동으로 기록을 시작하지 않습니다."
+    emb = discord.Embed(description=f"{i.user.mention} 자동기록: **{상태}**\n{text}", color=0x2ecc71 if val else 0xe74c3c)
+    emb.set_thumbnail(url=str(i.user.display_avatar.url))
+    await i.response.send_message(embed=emb, ephemeral=True)
+
+@bot.tree.command(name="자동기록상태", description="내 계정의 자동 기록 상태를 확인합니다.")
+async def cmd_autotrack_status(i: discord.Interaction):
+    uid = i.user.id
+    val = autotrack.get(uid, True)
+    상태 = "On" if val else "Off"
+    desc = "현재 **자동으로 기록을 시작**합니다." if val else "현재 **자동으로 기록을 시작하지 않습니다.**"
+    emb = discord.Embed(description=f"{i.user.mention} 자동기록 상태: **{상태}**\n{desc}", color=0x2ecc71 if val else 0xe74c3c)
+    emb.set_thumbnail(url=str(i.user.display_avatar.url))
+    await i.response.send_message(embed=emb, ephemeral=True)
 
 # ---------------- 실행 ----------------
 if not DISCORD_TOKEN:
