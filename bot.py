@@ -314,26 +314,25 @@ async def on_ready():
 
     # ⚡ 모든 길드에 '기존 등록 지우기 → 글로벌 정의 복사 → 동기화' 순서로 강제 리프레시
     synced_total = 0
+        # ⚡ 1) 길드에만 등록 (지우고→복사→동기화)
     for g in bot.guilds:
         try:
             guild_obj = discord.Object(id=g.id)
-            # 1) 길드 커맨드 캐시 비우기
-            bot.tree.clear_commands(guild=guild_obj)
-            # 2) 전역에 선언된(@bot.tree.command) 것들을 길드로 복사
-            bot.tree.copy_global_to(guild=guild_obj)
-            # 3) 길드 동기화
-            synced = await bot.tree.sync(guild=guild_obj)
-            print(f"✅ Synced {len(synced)} commands to guild {g.id} ({g.name})")
-            synced_total += len(synced)
+            bot.tree.clear_commands(guild=guild_obj)          # 길드 캐시 비우기
+            bot.tree.copy_global_to(guild=guild_obj)          # 전역 정의를 길드로 복사
+            synced = await bot.tree.sync(guild=guild_obj)     # 길드 동기화
+            print(f"✅ Guild sync: {g.id} ({g.name}) → {len(synced)} cmds")
         except Exception as e:
-            print(f"❌ Sync failed for {g.id} ({g.name}): {e}")
+            print(f"❌ Guild sync failed for {g.id} ({g.name}): {e}")
 
-    if synced_total == 0:
-        try:
-            gs = await bot.tree.sync()
-            print(f"🪄 Global sync pushed: {len(gs)} commands")
-        except Exception as e:
-            print(f"❌ Global sync failed: {e}")
+    # ⚠️ 2) 글로벌 등록을 비워서 '중복' 원인 제거
+    try:
+        bot.tree.clear_commands()      # 로컬 전역 트리 비움
+        gs = await bot.tree.sync()     # 빈 전역 트리를 서버에 반영 → 글로벌 명령 삭제
+        print(f"🧹 Cleared GLOBAL commands ({len(gs)} now)")
+    except Exception as e:
+        print(f"❌ Global clear failed: {e}")
+
 
 @bot.event
 async def on_voice_state_update(member:discord.Member, before:discord.VoiceState, after:discord.VoiceState):
