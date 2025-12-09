@@ -312,25 +312,28 @@ async def on_ready():
     for g in bot.guilds:
         print(f" - {g.id} | {g.name}")
 
-    # ⚡ GUILD_IDS 무시하고 '현재 들어가 있는 모든 길드'에 슬래시 명령 강제 싱크
-    #    (환경변수가 틀려도 작동하게)
+    # ⚡ 모든 길드에 '기존 등록 지우기 → 글로벌 정의 복사 → 동기화' 순서로 강제 리프레시
     synced_total = 0
     for g in bot.guilds:
         try:
-            synced = await bot.tree.sync(guild=discord.Object(id=g.id))
+            guild_obj = discord.Object(id=g.id)
+            # 1) 길드 커맨드 캐시 비우기
+            bot.tree.clear_commands(guild=guild_obj)
+            # 2) 전역에 선언된(@bot.tree.command) 것들을 길드로 복사
+            bot.tree.copy_global_to(guild=guild_obj)
+            # 3) 길드 동기화
+            synced = await bot.tree.sync(guild=guild_obj)
             print(f"✅ Synced {len(synced)} commands to guild {g.id} ({g.name})")
             synced_total += len(synced)
         except Exception as e:
             print(f"❌ Sync failed for {g.id} ({g.name}): {e}")
 
-    # 그래도 하나도 안 잡히면 글로벌 싱크(느릴 수 있지만 마지막 안전망)
     if synced_total == 0:
         try:
             gs = await bot.tree.sync()
             print(f"🪄 Global sync pushed: {len(gs)} commands")
         except Exception as e:
             print(f"❌ Global sync failed: {e}")
-
 
 @bot.event
 async def on_voice_state_update(member:discord.Member, before:discord.VoiceState, after:discord.VoiceState):
