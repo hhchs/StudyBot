@@ -452,7 +452,7 @@ async def cmd_help(i:discord.Interaction):
     e.add_field(name="/주간정산", value="이번주/저번주 개인 총시간", inline=False)
     e.add_field(name="/주간일람", value="전체 멤버의 이번주/저번주 일별 기록", inline=False)
     e.add_field(name="/자동기록", value="내 계정의 자동 기록 On/Off를 설정할 수 있습니다.", inline=False)
-    e.add_field(name="/자동기록상태", value="내 계정의 자동 기록 상태를 확인할 수 있습니다.", inline=False)
+    e.add_field(name="/자동기록상태", value="현재 자동기록 상태 확인", inline=False)
     await i.response.send_message(embed=e, ephemeral=True)
 
 @bot.tree.command(name="자동기록", description="내 계정의 자동 기록 On/Off를 설정합니다.")
