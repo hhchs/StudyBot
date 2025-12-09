@@ -142,8 +142,10 @@ def make_embed(mention: str, start_utc: datetime, now_utc: datetime, running: bo
     dur_secs = (now_utc - start_utc).total_seconds()
     h, m, s = hms_from_seconds(dur_secs)
 
-    start_local = start_utc.astimezone()
-    end_local = now_utc.astimezone()
+    KST = timezone(timedelta(hours=9))
+    start_local = start_utc.astimezone(KST)
+    end_local = now_utc.astimezone(KST)
+
 
     if running:
         # 진행 중일 때: 시작 시각 + 경과 시간
@@ -152,7 +154,7 @@ def make_embed(mention: str, start_utc: datetime, now_utc: datetime, running: bo
             color=0x2ecc71  # 초록 (진행 중)
         )
         e.add_field(name="시작", value=start_local.strftime("%Y-%m-%d %H:%M"), inline=True)
-        e.add_field(name="경과 시간", value=f"{h:02d}:{m:02d}:{s:02d}", inline=True)
+        e.add_field(name="시간", value=f"{h:02d}:{m:02d}:{s:02d}", inline=True)
         e.add_field(name="상태", value="진행중", inline=True)
     else:
         # 종료됐을 때: 시작 / 종료 시각 + 총 시간
